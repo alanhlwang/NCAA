@@ -1,0 +1,107 @@
+---
+title: "EDA"
+output: html_document
+---
+
+```{r}
+eda_list <- read_rds("eda_list.rds")
+all_teams_df <- do.call(rbind, eda_list)
+colnames(all_teams_df)[colnames(all_teams_df)== 'FG%'] <- "FGP"
+
+
+winner_plot_df <- all_teams_df %>% 
+  filter(Winner == "Winner") %>% 
+  group_by(Year) %>%
+  summarise(team = Team[1],
+            avg_FGP = mean(FGP),
+            avg_PTS = mean(PTS),
+            avg_AST = mean(AST),
+            avg_BLK = mean(BLK))
+
+loser_df <- all_teams_df %>% 
+  filter(Winner == "Loser") %>% 
+  group_by(Year) %>%
+  summarise(team = Team[1],
+            avg_FGP = mean(FGP),
+            avg_PTS = mean(PTS),
+            avg_AST = mean(AST),
+            avg_BLK = mean(BLK))
+winner_plot_df
+loser_df
+library(gganimate)
+library(ggthemes)
+ggplot(data = winner_plot_df,
+       mapping = aes(x = Year, y = avg_PTS)) +
+  geom_line(color = "#50C878", alpha = 0.6) +
+  geom_line(data=loser_df, aes(x=Year,y=avg_PTS), color = "#DC143C") +
+  ggtitle("PPG for NCAA Teams by Year") +
+  theme_fivethirtyeight() +
+  theme(plot.title = element_text(size = 19,
+                                  face = "plain",
+                                  hjust = 0.3),
+        text=element_text(size=14)) +
+  theme(axis.title=element_text()) +
+  xlab("Year") +
+  ylab("PPG") + 
+  transition_reveal(Year) +
+  ease_aes('cubic-in-out')
+
+ggplot(data = winner_plot_df,
+       mapping = aes(x = Year, y = avg_AST)) +
+  geom_line(color = "#50C878", alpha = 0.6) +
+  geom_line(data=loser_df, aes(x=Year,y=avg_AST), color = "#DC143C") +
+  ggtitle("Assists for NCAA Teams by Year") +
+  theme_fivethirtyeight() +
+  theme(plot.title = element_text(size = 19,
+                                  face = "plain",
+                                  hjust = 0.3),
+        text=element_text(size=14)) +
+  theme(axis.title=element_text()) +
+  xlab("Year") +
+  ylab("PPG") + 
+  transition_reveal(Year) +
+  ease_aes('cubic-in-out')
+
+ggplot(data = winner_plot_df,
+       mapping = aes(x = Year, y = avg_FGP)) +
+  geom_line(color = "#50C878", alpha = 0.6) +
+  geom_line(data=loser_df, aes(x=Year,y=avg_FGP), color = "#DC143C") +
+  ggtitle("Field Goal Percentage for NCAA Teams by Year") +
+  theme_fivethirtyeight() +
+  theme(plot.title = element_text(size = 19,
+                                  face = "plain",
+                                  hjust = 0.3),
+        text=element_text(size=14)) +
+  theme(axis.title=element_text()) +
+  xlab("Year") +
+  ylab("PPG") + 
+  transition_reveal(Year) +
+  ease_aes('cubic-in-out')
+```
+
+
+```{r}
+ggplot(data = winner_plot_df,
+       mapping = aes(x = Year, y = avg_BLK)) +
+  geom_line(color = "#50C878", alpha = 0.6) +
+  geom_line(data=loser_df, aes(x=Year,y=avg_BLK), color = "#DC143C") +
+  ggtitle("PPG for NBA Champions by Year") +
+  theme_fivethirtyeight() +
+  theme(plot.title = element_text(size = 19,
+                                  face = "plain",
+                                  hjust = 0.3),
+        text=element_text(size=14)) +
+  theme(axis.title=element_text()) +
+  xlab("Year") +
+  ylab("PPG") + 
+  transition_reveal(Year) +
+  ease_aes('cubic-in-out')
+
+ggplot(all_teams_df, aes(x = Winner, y = BLK, fill = Winner)) + 
+  stat_boxplot(geom = "errorbar",
+               width = 0.25) + 
+  geom_boxplot() +
+  ggtitle("Blocks for NCAA Teams") +
+  theme_fivethirtyeight()
+```
+

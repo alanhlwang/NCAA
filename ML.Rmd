@@ -1,0 +1,233 @@
+---
+title: "ML"
+output: html_document
+---
+
+```{r}
+rm(list=ls())
+library(tidyverse)
+library(caret)
+
+winners_df <- read_csv("winners_df.csv")
+all_teams_list <- read_rds("all_teams_list.rds")
+```
+
+## Adding Loser, Winner to Data
+```{r}
+winners_df <- winners_df %>% 
+  mutate_at(colnames(winners_df)[-2], as.numeric)
+
+all_teams_list <- map(all_teams_list, function(x) {
+  x %>% 
+    mutate_at(colnames(x)[-2], as.numeric)
+})
+
+
+
+for (i in 1:length(all_teams_list)) {
+  all_teams_list[[i]]$Winner <- factor("Loser", levels = c("Loser", "Winner"))
+  year <- all_teams_list[[i]]$Year[1]
+  team <- winners_df %>% 
+    filter(Year == year) %>% 
+    select(Team) %>% 
+    as.character
+  
+  all_teams_list[[i]][all_teams_list[[i]]$Team == team,]$Winner <- "Winner"
+}
+
+#write_rds(all_teams_list, "eda_list.rds")
+```
+
+
+# Naive-Bayes Classifier
+```{r}
+set.seed(123)
+train_i <- sample(c(1998,2001, 2007:2008,2010:2018), 9)
+all_teams_df <- do.call(rbind, all_teams_list)
+
+all_teams_df
+
+train_df <- all_teams_df[all_teams_df$Year %in% train_i, ]
+test_df <- all_teams_df[!all_teams_df$Year %in% train_i, ]
+
+training_y <- train_df$Winner
+training_x <- as.matrix(train_df[,-c(2,ncol(all_teams_list[[1]]))])
+testing_y <- test_df$Winner
+testing_x <- as.matrix(test_df[,-c(2,ncol(all_teams_list[[1]]))])
+
+training_x[,colnames(training_x) == 'MP'][is.na(training_x[,colnames(training_x) == 'MP'])] <- mean(training_x[,colnames(training_x) == 'MP'][!is.na(training_x[,colnames(training_x) == 'MP'])])
+training_x[,colnames(training_x) == 'G'][is.na(training_x[,colnames(training_x) == 'G'])] <- mean(training_x[,colnames(training_x) == 'G'][!is.na(training_x[,colnames(training_x) == 'G'])])
+
+testing_x[,colnames(testing_x) == 'MP'][is.na(testing_x[,colnames(testing_x) == 'MP'])] <- mean(testing_x[,colnames(testing_x) == 'MP'][!is.na(testing_x[,colnames(testing_x) == 'MP'])])
+testing_x[,colnames(testing_x) == 'G'][is.na(testing_x[,colnames(testing_x) == 'G'])] <- mean(testing_x[,colnames(testing_x) == 'G'][!is.na(testing_x[,colnames(testing_x) == 'G'])])
+
+library(e1071)
+nb_model1 <- naiveBayes(training_x, training_y)
+test_case_a <- as.matrix(testing_x)
+
+predict_df <- as.data.frame(predict(nb_model1, newdata = test_case_a, type = "raw"))
+predict_df$Year <- substr(names(test_case_a[,1]), 1,4)
+predict_df$Team <- test_df$Team
+predict_df$Winner_True <- test_df$Winner
+predict_df %>% 
+  group_by(Year) %>% 
+  top_n(n = 2, wt = Winner)
+  
+```
+
+
+## Random Forest Approach
+```{r}
+library("randomForest")
+set.seed(102340)
+train_df$MP[is.na(train_df$MP)] <- mean(train_df$MP,na.rm = TRUE)
+train_df$G[is.na(train_df$G)] <- mean(train_df$G,na.rm = TRUE)
+colnames(train_df)[colnames(train_df)== 'FT%'] <- "FTP"
+colnames(train_df)[colnames(train_df)== '3P%'] <- "TPP"
+colnames(train_df)[colnames(train_df)== '3PA'] <- "TPA"
+colnames(train_df)[colnames(train_df)== '2PA'] <- "TwPA"
+colnames(train_df)[colnames(train_df)== '2P'] <- "TwP"
+colnames(train_df)[colnames(train_df)== '3P'] <- "TP"
+colnames(train_df)[colnames(train_df)== '2P%'] <- "TwPP"
+colnames(train_df)[colnames(train_df)== 'FG%'] <- "FGP"
+train_df$'TPP'[is.na(train_df$'TPP')] <- mean(train_df$'TPP',na.rm = TRUE)
+test_df
+
+test_df$MP[is.na(test_df$MP)] <- mean(test_df$MP,na.rm = TRUE)
+test_df$G[is.na(test_df$G)] <- mean(test_df$G,na.rm = TRUE)
+colnames(test_df)[colnames(test_df)== 'FT%'] <- "FTP"
+colnames(test_df)[colnames(test_df)== '3P%'] <- "TPP"
+colnames(test_df)[colnames(test_df)== '3PA'] <- "TPA"
+colnames(test_df)[colnames(test_df)== '2PA'] <- "TwPA"
+colnames(test_df)[colnames(test_df)== '2P'] <- "TwP"
+colnames(test_df)[colnames(test_df)== '3P'] <- "TP"
+colnames(test_df)[colnames(test_df)== '2P%'] <- "TwPP"
+colnames(test_df)[colnames(test_df)== 'FG%'] <- "FGP"
+test_df$'TPP'[is.na(test_df$'TPP')] <- mean(test_df$'TPP',na.rm = TRUE)
+rf_m = randomForest(Winner~., data=train_df, ntree=100, proximity=T)
+rf_m = randomForest(Winner~., data=train_df, mtry = 4, ntree=100, proximity=T)
+test_df
+predictions <- predict(rf_m, newdata = test_df, type = "prob")
+
+
+predict_df <- as.data.frame(predictions)
+
+
+predict_df$Year <- substr(names(test_case_a[,1]), 1,4)
+predict_df$Team <- test_df$Team
+predict_df$Winner_True <- test_df$Winner
+predict_df %>% 
+  group_by(Year) %>% 
+  top_n(n = 3, wt = Winner)
+
+predict_df %>% 
+  group_by(Year) %>% 
+  top_n(n = 2, wt = Winner)
+
+predict_df %>% 
+  group_by(Year) %>% 
+  top_n(n = 1, wt = Winner)
+
+mtry <- tuneRF(training_x, training_y, ntreeTry=500,
+               stepFactor=1.5,improve=0.01, trace=TRUE, plot=TRUE)
+best.m <- mtry[mtry[, 2] == min(mtry[, 2]), 1]
+print(mtry)
+print(best.m)
+
+library(caret)
+got_right <- 0
+counter <- 0
+for (i in 1:length(c(1998,2001, 2007:2008,2010:2018))) {
+  test_df <- all_teams_list[[i]]
+  train_df <- do.call(rbind, all_teams_list[-i])
+  
+  train_df$MP[is.na(train_df$MP)] <- mean(train_df$MP,na.rm = TRUE)
+  train_df$G[is.na(train_df$G)] <- mean(train_df$G,na.rm = TRUE)
+  colnames(train_df)[colnames(train_df)== 'FT%'] <- "FTP"
+  colnames(train_df)[colnames(train_df)== '3P%'] <- "TPP"
+  colnames(train_df)[colnames(train_df)== '3PA'] <- "TPA"
+  colnames(train_df)[colnames(train_df)== '2PA'] <- "TwPA"
+  colnames(train_df)[colnames(train_df)== '2P'] <- "TwP"
+  colnames(train_df)[colnames(train_df)== '3P'] <- "TP"
+  colnames(train_df)[colnames(train_df)== '2P%'] <- "TwPP"
+  colnames(train_df)[colnames(train_df)== 'FG%'] <- "FGP"
+  train_df$'TPP'[is.na(train_df$'TPP')] <- mean(train_df$'TPP',na.rm = TRUE)
+    
+  test_df$MP[is.na(test_df$MP)] <- mean(test_df$MP,na.rm = TRUE)
+  test_df$G[is.na(test_df$G)] <- mean(test_df$G,na.rm = TRUE)
+  colnames(test_df)[colnames(test_df)== 'FT%'] <- "FTP"
+  colnames(test_df)[colnames(test_df)== '3P%'] <- "TPP"
+  colnames(test_df)[colnames(test_df)== '3PA'] <- "TPA"
+  colnames(test_df)[colnames(test_df)== '2PA'] <- "TwPA"
+  colnames(test_df)[colnames(test_df)== '2P'] <- "TwP"
+  colnames(test_df)[colnames(test_df)== '3P'] <- "TP"
+  colnames(test_df)[colnames(test_df)== '2P%'] <- "TwPP"
+  colnames(test_df)[colnames(test_df)== 'FG%'] <- "FGP"
+  test_df$'TPP'[is.na(test_df$'TPP')] <- mean(test_df$'TPP',na.rm = TRUE)
+  
+  model = randomForest(Winner~., data=train_df, mtry = 4, ntree=100, proximity=T)
+  predictions <- predict(model, newdata = test_df, type = "prob")
+
+
+  predict_df <- as.data.frame(predictions)
+  predict_df$Team <- test_df$Team
+  predict_df$Winner_True <- test_df$Winner
+  
+  win_predict <- predict_df %>% 
+    top_n(n = 1, wt = Winner)
+  got_right <- got_right + sum(win_predict$Winner_True == "Winner")
+  counter <- counter + 1
+}
+
+got_right/length(c(1998,2001, 2007:2008,2010:2018))
+
+
+df3 <- data.frame(variable = rownames(varImp(rf_m)),
+           importance = varImp(rf_m)$Overall)
+df3$variable <- factor(df3$variable)
+df3 <- df3 %>% 
+  arrange(desc(importance)) 
+df3 <- df3[1:10,]
+df3$variable <- as.character(df3$variable)
+
+df3
+```
+
+```{r}
+variable_imp <- ggplot(data = df3,
+       aes(reorder(variable, importance,sum), importance)) + 
+  geom_col(aes(fill = importance)) + 
+  ggtitle("Variable Importance") +
+  scale_fill_gradient2(low = "#ffc3a0",
+                       high = "#ffafbd") +
+  theme_fivethirtyeight() +
+  theme(plot.title = element_text(size = 15,
+                                  face = "plain",
+                                  hjust = 0.5),
+        text=element_text(size=10)) +
+  theme(axis.title=element_text()) +
+  ylab("Importance") +
+  xlab(NULL) +
+  coord_flip()
+
+variable_imp
+```
+ 
+
+
+
+```{r}
+library("party")
+x <- ctree(Species ~ ., data=iris)
+train_df
+rf_m2 <- ctree(Winner~., data=train_df[,-c(2,25)])
+plot(rf_m2, type="simple")
+```
+
+
+
+```{r}
+library(class)
+knn(train = training_x, cl = training_y, test = test_case_a, k = 5)
+```
+

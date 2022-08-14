@@ -1,0 +1,361 @@
+---
+title: "NCAA"
+output: html_document
+---
+
+
+## Create Dataframe of Names of Championship Teams
+```{r}
+library(stringi)
+library(readr)
+library(tidyverse)
+
+results_df <- read_csv("big_dance_csv.csv")
+
+results_df <- results_df %>% 
+  filter(round == 6) %>% 
+  select(year, team, seed, score, team_2, seed_2, score_2)
+
+f <- function(x) NA
+
+winner_df <- results_df %>% 
+  select(team, year, seed) %>% 
+  mutate_all(f)
+
+
+for (i in 1:nrow(winner_df)) {
+  if (results_df$score[i] > results_df$score_2[i]) {
+    winner_df$team[i] <- results_df$team[i]
+    winner_df$seed[i] <- results_df$seed[i]
+  }
+  else {
+    winner_df$team[i] <- results_df$team_2[i]
+    winner_df$seed[i] <- results_df$seed_2[i]
+  }
+}
+
+winner_df$year <- results_df$year
+winner_df <- winner_df %>% 
+  arrange(desc(year))
+head(winner_df)
+```
+
+## Get Regular Season Statistics for Each of those Winning Teams (1988-2019)
+```{r}
+library(rvest)
+s <- session("https://www.sports-reference.com/cbb/postseason/")
+
+Virginia <- s %>% 
+  follow_link(paste(as.character(2019), "NCAA Tournament")) %>%
+  follow_link("Virginia") %>% 
+  follow_link("2018-19") %>% read_html()
+
+virginia_text <- Virginia %>%
+  html_nodes("#schools_per_game .left , #schools_per_game .center") %>% 
+  html_text()
+
+virginia_text <- stri_remove_empty(virginia_text)[-1]
+virginia_text[24:1]
+
+virginia_matrix <- matrix(ncol = 25)
+colnames(virginia_matrix) <- c("Year", virginia_text[24:1])
+
+teams_df <- as.data.frame(virginia_matrix)
+teams_df[1,] <- c(2019, "Virginia", virginia_text[47:25])
+
+
+winner_df1 <- winner_df[1:(nrow(winner_df)-3),]
+winner_df1
+k = 0
+for (i in 1988:2018) {
+  current_team <- winner_df1[nrow(winner_df1) - k,]$team
+  if (current_team == "Connecticut") {
+    current_team <- "UConn"
+  } else if (current_team == "North Carolina") {
+    current_team <- "UNC"
+  }
+  
+  current_season <- paste(as.character(i-1), stri_sub(as.character(i), -2), sep = "-")
+  
+  team_data <- s %>%
+    follow_link(paste(as.character(i), "NCAA Tournament")) %>% 
+    follow_link(current_team) %>% 
+    follow_link(current_season) %>% 
+    read_html() %>% 
+    html_nodes("#schools_per_game .left , #schools_per_game .center") %>% 
+    html_text()
+  
+  team_data[team_data == ""] <- NA
+  
+  team_data <- stri_remove_empty(team_data)[-1]
+  
+  teams_df <- rbind(teams_df, c(i, current_team, team_data[47:25]))
+  
+  k = k + 1
+}
+
+teams_df <- teams_df %>% 
+  arrange(desc(Year))
+winners_df <- teams_df
+
+# write_csv(winners_df, "winners_df.csv")
+
+winners_df
+```
+
+
+
+## Get non-winner data
+```{r}
+all_teams_df <- subset(winners_df, FALSE)
+current_yr_s <- s %>% 
+  follow_link(paste(as.character(2019), "NCAA Tournament"))
+
+all_teams <- current_yr_s %>% 
+  html_nodes(".round:nth-child(1) span+ a") %>% 
+  html_text()
+all_teams <- unique(all_teams)
+
+team_data <- current_yr_s %>% 
+  follow_link("Duke") %>% 
+  html_nodes("#schools_per_game .left , #schools_per_game .center") %>% 
+  html_text()
+team_data <- stri_remove_empty(team_data)[-1]
+team_data[team_data == ""] <- NA
+
+all_teams_df[1,] <- c(2019, "Duke", team_data[47:25])
+all_teams_df
+
+all_teams_list <- list()
+
+k = 1
+for(i in c(1998,2001, 2007:2008,2010:2018)) {
+  
+  # create huge list where each component is the df for reg season teams for a specific year
+  all_teams_list[[k]] <- subset(winners_df, FALSE)
+  
+  # access current year session
+  current_year <- s %>% 
+    follow_link(paste(as.character(i), "NCAA Tournament"))
+  current_season <- paste(as.character(i-1), stri_sub(as.character(i), -2), sep = "-")
+  
+  # get all unique teams in bracket that year
+  all_teams <- current_year %>% 
+    html_nodes(".round:nth-child(1) span+ a") %>% 
+    html_text()
+  all_teams <- unique(all_teams)
+
+  # get first team data for that year, use to start building df in list component for that year with 1st row
+  team_data <- current_year %>% 
+    follow_link(all_teams[1]) %>% 
+    html_nodes("#schools_per_game .left , #schools_per_game .center") %>% 
+    html_text()
+
+  if (length(team_data) == 0) {
+      team_data <- current_year %>% 
+          follow_link(all_teams[1]) %>% 
+          follow_link(current_season) %>% 
+          html_nodes("#schools_per_game .left , #schools_per_game .center") %>% 
+          html_text()
+  }
+    
+  team_data <- stri_remove_empty(team_data)[-1]
+  team_data[team_data == ""] <- NA
+    
+  all_teams_list[[k]][1,] <- c(i, all_teams[1], team_data[47:25])
+  if (i == 1998 || i == 2001) {
+    all_teams_list[[k]][1,] <- c(i, all_teams[1], team_data[46:24])
+  }
+    # fill in rest of rows of df for that list component year
+    for (j in 2:length(all_teams)) {
+      team_data <- current_year %>% 
+        follow_link(all_teams[j]) %>% 
+        html_nodes("#schools_per_game .left , #schools_per_game .center") %>% 
+        html_text()
+      
+         
+    if (all_teams[j] ==  "Memphis" && i == 2014) {
+      new_s <- session("www.sports-reference.com/cbb/schools/memphis/2014.html")
+      team_data <- new_s %>% 
+        html_nodes("#schools_per_game .left , #schools_per_game .center") %>% 
+        html_text()
+    }
+    if (all_teams[j] ==  "Milwaukee" && i == 2014) {
+      new_s <- session("www.sports-reference.com/cbb/schools/milwaukee/2014.html")
+      team_data <- new_s %>% 
+        html_nodes("#schools_per_game .left , #schools_per_game .center") %>% 
+        html_text()
+    }
+      if (length(team_data) == 0) {
+        team_data <- current_year %>% 
+          follow_link(all_teams[j]) %>% 
+          follow_link(current_season) %>% 
+          html_nodes("#schools_per_game .left , #schools_per_game .center") %>% 
+          html_text()
+      }
+      
+      if (T) 
+        team_i <- 48:26
+      
+      all_teams_list[[k]][j,] <- c(i, all_teams[j], team_data[team_i])
+        
+    }
+    
+    k = k + 1
+}
+
+all_teams_list
+#write_rds(all_teams_list,"all_teams_list.rds")
+```
+
+
+
+
+
+
+
+```{r}
+all_teams_list <- list()
+
+k = 1
+  
+  # create huge list where each component is the df for reg season teams for a specific year
+all_teams_list[[k]] <- subset(winners_df, FALSE)
+  
+  # access current year session
+current_year <- s %>% 
+    follow_link(paste(as.character(2014), "NCAA Tournament"))
+current_season <- paste(as.character(2014-1), stri_sub(as.character(2014), -2), sep = "-")
+  # get all unique teams in bracket that year
+all_teams <- current_year %>% 
+    html_nodes(".round:nth-child(1) span+ a") %>% 
+    html_text()
+all_teams <- unique(all_teams)
+
+  # get first team data for that year, use to start building df in list component for that year with 1st row
+team_data <- current_year %>% 
+    follow_link(all_teams[1]) %>% 
+    html_nodes("#schools_per_game .left , #schools_per_game .center") %>% 
+    html_text()
+
+if (length(team_data) == 0) {
+    team_data <- current_year %>% 
+        follow_link(all_teams[1]) %>% 
+        follow_link(current_season) %>% 
+        html_nodes("#schools_per_game .left , #schools_per_game .center") %>% 
+        html_text()
+}
+
+team_data <- stri_remove_empty(team_data)[-1]
+team_data[team_data == ""] <- NA
+  
+all_teams_list[[k]][1,] <- c(i, all_teams[1], team_data[47:25])
+  
+  # fill in rest of rows of df for that list component year
+for (j in 2:length(all_teams)) {
+    team_data <- current_year %>% 
+      follow_link(all_teams[j]) %>% 
+      html_nodes("#schools_per_game .left , #schools_per_game .center") %>% 
+      html_text()
+    
+    if (all_teams[j] ==  "Memphis") {
+      new_s <- session("www.sports-reference.com/cbb/schools/memphis/2014.html")
+      team_data <- new_s %>% 
+        html_nodes("#schools_per_game .left , #schools_per_game .center") %>% 
+        html_text()
+    }
+    if (all_teams[j] ==  "Milwaukee") {
+      new_s <- session("www.sports-reference.com/cbb/schools/milwaukee/2014.html")
+      team_data <- new_s %>% 
+        html_nodes("#schools_per_game .left , #schools_per_game .center") %>% 
+        html_text()
+    }
+    if (length(team_data) == 0) {
+      team_data <- current_year %>% 
+        follow_link(all_teams[j]) %>% 
+        follow_link(current_season) %>% 
+        html_nodes("#schools_per_game .left , #schools_per_game .center") %>% 
+        html_text()
+    }
+    team_data <- stri_remove_empty(team_data)[-1]
+    team_data[team_data == ""] <- NA
+    
+    all_teams_list[[k]][j,] <- c(i, all_teams[j], team_data[47:25])
+      
+}
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Capture NBA, average exp
+```{r}
+ current_team <- "Virginia"
+  if (current_team == "Connecticut") {
+    current_team <- "UConn"
+  } else if (current_team == "North Carolina") {
+    current_team <- "UNC"
+  }
+  
+  current_season <- "2018-19"
+  
+ s %>%
+    follow_link(paste(as.character(2019), "NCAA Tournament")) %>% 
+    follow_link(current_team) %>% 
+    follow_link(current_season) %>% 
+    read_html() %>% 
+    html_nodes("small") %>% 
+    html_text()
+```
+
+
+
+## Classification
