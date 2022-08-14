@@ -1,10 +1,11 @@
-# NCAA
+# NCAA March Madness Predictions
 
 Collecting March Madness data to evaluate trends between what defines a winning versus a losing team and introduce a model aimed at predicting the championship every year.
 
-# NCAA March Madness Predictions
+# Introduction
 Every time March rolls around, the one thing that dominates headlines is March Madness. It might be your overly-crazed sports dad, your rowdy college roommates, or even your unapologetically homer mother who gives you endless updates on the tournament. This intensity comes from uncertainty: March Madness is a single-elimination tournament where 68 of the best college basketball teams across the country go head-to-head. Due to the single-elimination format, upsets are much more common than in the professional equivalents (I'm looking at you, the NBA's 7 game series). I want to take a deep-dive into the March Madness data, evaluate trends between what defines a winning versus a losing team, and introduce a model aimed at predicting the championship every year.
-Context
+
+# Context
 March Madness is the culmination of a nationwide college Division 1 Basketball season. The tournament pits 68 of the best teams in the nation against each other in a single-elimination tournament and most recently has drawn in more than $500 million in revenue for the NCAA. 
 The tournament splits teams into four separate regions: the South, West, East, and Midwest.There are a total of 6 rounds, 7 if you include the play-in tournament for the four lowest ranked teams. The tournament itself has existed since the 1930's, where its first game was played in 1939 and UCLA has the most championship wins at 11!
 Data Collection
